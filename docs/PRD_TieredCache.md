@@ -55,22 +55,22 @@ The library must provide a primary interface for interaction.
 public interface ITieredCache  
 {  
     // The primary method for data retrieval  
-    Task\<T\> GetOrCreateAsync\<T\>(  
+    Task<<T> GetOrCreateAsync<T>(  
         string key,  
-        Func\<Task\<T\>\> factory,  
+        Func<Task<T>> factory,  
         TieredCacheEntryOptions options);
 
     // Manual removal from all tiers  
     Task RemoveAsync(string key);
 
     // Manual setting of a value in all tiers  
-    Task SetAsync\<T\>(  
+    Task SetAsync<T>(  
         string key,  
         T value,  
         TieredCacheEntryOptions options);
 
     // Get-only (no factory), returns default(T) if not found  
-    Task\<T\> GetAsync\<T\>(string key);  
+    Task<T> GetAsync<T>(string key);  
 }
 ```
 
@@ -99,11 +99,11 @@ The library must be configurable via IServiceCollection extension methods.
 
 ### **FR4.4: Pluggable Serialization**
 
-IDistributedCache stores byte\[\], so serialization is required.
+IDistributedCache stores byte[], so serialization is required.
 
 * The library must define a simple ITieredCacheSerializer interface.  
 * The library must provide a default implementation using System.Text.Json (JsonTieredCacheSerializer).  
-* The DI registration must allow overriding the serializer: services.AddTieredCache().WithSerializer\<MyCustomSerializer\>();
+* The DI registration must allow overriding the serializer: services.AddTieredCache().WithSerializer<MyCustomSerializer>();
 
 ### **FR4.5: Core GetOrCreateAsync Logic**
 
@@ -111,25 +111,25 @@ This is the core business logic of the library. The flow must be:
 
 1. Generate an internal cache key.  
 2. **Check L1 (IMemoryCache):**  
-   * \_memoryCache.TryGetValue(key, out T item)  
+   * _memoryCache.TryGetValue(key, out T item)  
    * If **hit**, return item.  
 3. **Check L2 (IDistributedCache):**  
-   * \_distributedCache.GetAsync(key)  
+   * _distributedCache.GetAsync(key)  
    * If **hit**:  
-     * Call \_serializer.Deserialize\<T\>(bytes).  
-     * Store the deserialized item in L1: \_memoryCache.Set(key, item, options.L1Options).  
+     * Call _serializer.Deserialize<T>(bytes).  
+     * Store the deserialized item in L1: _memoryCache.Set(key, item, options.L1Options).  
      * Return item.  
 4. **Cache Miss (Factory Execution):**  
-   * Execute the user's factory() method: T item \= await factory();  
+   * Execute the user's factory() method: T item = await factory();  
    * If item is not null:  
-     * **Set L2:** Serialize item (\_serializer.Serialize(item)) and call \_distributedCache.SetAsync(key, bytes, options.L2Options).  
-     * **Set L1:** Call \_memoryCache.Set(key, item, options.L1Options).  
+     * **Set L2:** Serialize item (_serializer.Serialize(item)) and call _distributedCache.SetAsync(key, bytes, options.L2Options).  
+     * **Set L1:** Call _memoryCache.Set(key, item, options.L1Options).  
    * Return item.
 
 ### **FR4.6: RemoveAsync Logic**
 
-* \_memoryCache.Remove(key)  
-* \_distributedCache.RemoveAsync(key)  
+* _memoryCache.Remove(key)  
+* _distributedCache.RemoveAsync(key)  
 * Both tiers must be cleared.
 
 ---
@@ -162,13 +162,13 @@ This is how a developer will use the library.
 ### **Program.cs**
 
 ```C#
-var builder \= WebApplication.CreateBuilder(args);
+var builder = WebApplication.CreateBuilder(args);
 
 // 1. Add standard .NET caches  
 builder.Services.AddMemoryCache();  
-builder.Services.AddStackExchangeRedisCache(options \=\>  
+builder.Services.AddStackExchangeRedisCache(options =>  
 {  
-    options.Configuration \= builder.Configuration.GetConnectionString("Redis");  
+    options.Configuration = builder.Configuration.GetConnectionString("Redis");  
 });
 
 // 2. Add TieredCache  
@@ -183,42 +183,42 @@ builder.Services.AddTieredCache();
 ```C#
 public class ProductService  
 {  
-    private readonly ITieredCache \_cache;  
-    private readonly AppDbContext \_db;
+    private readonly ITieredCache _cache;  
+    private readonly AppDbContext _db;
 
     public ProductService(ITieredCache cache, AppDbContext db)  
     {  
-        \_cache \= cache;  
-        \_db \= db;  
+        _cache = cache;  
+        _db = db;  
     }
 
-    public async Task\<Product\> GetProductByIdAsync(int id)  
+    public async Task<Product> GetProductByIdAsync(int id)  
     {  
-        string key \= $"product:{id}";
+        string key = $"product:{id}";
 
-        var options \= new TieredCacheEntryOptions  
+        var options = new TieredCacheEntryOptions  
         {  
             // Keep in local memory for 5 minutes  
-            L1Options \= new MemoryCacheEntryOptions()  
+            L1Options = new MemoryCacheEntryOptions()  
                 .SetAbsoluteExpiration(TimeSpan.FromMinutes(5)),  
               
             // Keep in shared Redis cache for 1 hour  
-            L2Options \= new DistributedCacheEntryOptions()  
+            L2Options = new DistributedCacheEntryOptions()  
                 .SetAbsoluteExpiration(TimeSpan.FromHours(1))  
         };
 
         // This single call handles all the logic  
-        return await \_cache.GetOrCreateAsync(key, async () \=\>  
+        return await _cache.GetOrCreateAsync(key, async () =>  
         {  
             // This factory only runs on a total cache miss  
-            return await \_db.Products.FindAsync(id);  
+            return await _db.Products.FindAsync(id);  
         }, options);  
     }
 
     public async Task ClearProductFromCacheAsync(int id)  
     {  
         // This removes from both L1 and L2  
-        await \_cache.RemoveAsync($"product:{id}");  
+        await _cache.RemoveAsync($"product:{id}");  
     }  
 }  
 ```

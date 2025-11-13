@@ -1,4 +1,4 @@
-## **Product Requirements Document: TieredCache**
+# **Product Requirements Document: TieredCache**
 
 * **Document Version:** 1.0  
 * **Date:** 2025-11-13  
@@ -6,7 +6,7 @@
 
 ---
 
-### **1\. Introduction**
+## **1. Introduction**
 
 **TieredCache** is a .NET library designed to abstract and simplify multi-layer caching.
 
@@ -28,7 +28,7 @@ This logic is error-prone, clutters business code, and is hard to maintain.
 
 ---
 
-### **2\. Target Audience & Use Cases**
+## **2. Target Audience & Use Cases**
 
 * **Audience:** .NET developers building Web APIs, microservices, or any application that needs to read data with high performance.  
 * **Use Case 1 (Read-Heavy API):** A service endpoint needs to fetch product details. This data is read 1000x more often than it is written. The developer wants to serve requests from in-memory (L1) if possible, fall back to a shared Redis cache (L2), and only hit the database as a last resort.  
@@ -36,7 +36,7 @@ This logic is error-prone, clutters business code, and is hard to maintain.
 
 ---
 
-### **3\. Goals & Objectives**
+## **3. Goals & Objectives**
 
 * **Reduce Boilerplate:** Eliminate 90% of the manual cache-checking logic from application services.  
 * **Improve Readability:** Make data retrieval logic clean and focused on the business intent, not the caching mechanics.  
@@ -45,14 +45,13 @@ This logic is error-prone, clutters business code, and is hard to maintain.
 
 ---
 
-### **4\. Functional Requirements**
+## **4. Functional Requirements**
 
-#### **FR4.1: Core Interface**
+### **FR4.1: Core Interface**
 
 The library must provide a primary interface for interaction.
 
-C\#
-
+```C#
 public interface ITieredCache  
 {  
     // The primary method for data retrieval  
@@ -73,13 +72,13 @@ public interface ITieredCache
     // Get-only (no factory), returns default(T) if not found  
     Task\<T\> GetAsync\<T\>(string key);  
 }
+```
 
-#### **FR4.2: Tiered Options Class**
+### **FR4.2: Tiered Options Class**
 
 A new options class is required to define separate policies for L1 and L2.
 
-C\#
-
+```C#
 public class TieredCacheEntryOptions  
 {  
     // Options for the IMemoryCache (L1)  
@@ -88,8 +87,9 @@ public class TieredCacheEntryOptions
     // Options for the IDistributedCache (L2)  
     public DistributedCacheEntryOptions L2Options { get; set; }  
 }
+```
 
-#### **FR4.3: Dependency Injection**
+### **FR4.3: Dependency Injection**
 
 The library must be configurable via IServiceCollection extension methods.
 
@@ -97,7 +97,7 @@ The library must be configurable via IServiceCollection extension methods.
 * This method should automatically find and use the already-registered IMemoryCache and IDistributedCache from the service container.  
 * It must register ITieredCache as a Scoped or Transient service.
 
-#### **FR4.4: Pluggable Serialization**
+### **FR4.4: Pluggable Serialization**
 
 IDistributedCache stores byte\[\], so serialization is required.
 
@@ -105,7 +105,7 @@ IDistributedCache stores byte\[\], so serialization is required.
 * The library must provide a default implementation using System.Text.Json (JsonTieredCacheSerializer).  
 * The DI registration must allow overriding the serializer: services.AddTieredCache().WithSerializer\<MyCustomSerializer\>();
 
-#### **FR4.5: Core GetOrCreateAsync Logic**
+### **FR4.5: Core GetOrCreateAsync Logic**
 
 This is the core business logic of the library. The flow must be:
 
@@ -126,7 +126,7 @@ This is the core business logic of the library. The flow must be:
      * **Set L1:** Call \_memoryCache.Set(key, item, options.L1Options).  
    * Return item.
 
-#### **FR4.6: RemoveAsync Logic**
+### **FR4.6: RemoveAsync Logic**
 
 * \_memoryCache.Remove(key)  
 * \_distributedCache.RemoveAsync(key)  
@@ -134,7 +134,7 @@ This is the core business logic of the library. The flow must be:
 
 ---
 
-### **5\. Non-Functional Requirements**
+## **5. Non-Functional Requirements**
 
 * **Performance:** The overhead of the library's logic (checks and DI) must be negligible. The primary performance cost will be serialization, which is unavoidable.  
 * **Reliability:** If the L2 cache (e.g., Redis) is unavailable, the library must *not* throw an exception that breaks the application. It should log the error and (ideally) fall back to behaving as an L1-only cache.  
@@ -147,7 +147,7 @@ This is the core business logic of the library. The flow must be:
 
 ---
 
-### **6\. Out of Scope (v1.0)**
+## **6. Out of Scope (v1.0)**
 
 * **Automatic Cache Invalidation Bus:** Automatically removing an L1 item from *all* app instances when an L2 item is updated is complex. This feature (requiring a message bus like Redis Pub/Sub) is out of scope for v1.0. RemoveAsync will only clear the L1 cache on the instance that calls it.  
 * **More than 2 Tiers:** v1.0 will only support the L1 (Memory) and L2 (Distributed) pattern.  
@@ -155,33 +155,32 @@ This is the core business logic of the library. The flow must be:
 
 ---
 
-### **7\. API Design & Code Examples**
+## **7. API Design & Code Examples**
 
 This is how a developer will use the library.
 
-#### **Program.cs**
+### **Program.cs**
 
-C\#
-
+```C#
 var builder \= WebApplication.CreateBuilder(args);
 
-// 1\. Add standard .NET caches  
+// 1. Add standard .NET caches  
 builder.Services.AddMemoryCache();  
 builder.Services.AddStackExchangeRedisCache(options \=\>  
 {  
     options.Configuration \= builder.Configuration.GetConnectionString("Redis");  
 });
 
-// 2\. Add TieredCache  
+// 2. Add TieredCache  
 // This automatically finds the services above.  
 builder.Services.AddTieredCache(); 
 
 // ... rest of setup
+```
 
-#### **MyProductService.cs**
+### **MyProductService.cs**
 
-C\#
-
+```C#
 public class ProductService  
 {  
     private readonly ITieredCache \_cache;  
@@ -222,3 +221,4 @@ public class ProductService
         await \_cache.RemoveAsync($"product:{id}");  
     }  
 }  
+```
